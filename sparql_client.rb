@@ -13,10 +13,11 @@ class SparqlClient
     SupportedFormats.merge!({ 'application/sparql-results+json' => :json })
   end
 
-  class Error < StandardError; end
+  class ClientError < StandardError; end
+  class MalformedQuery < ClientError; end
+  class Unauthorized < ClientError; end
 
   base_uri 'http://localhost:8890/'
-  endpoint 'sparql-auth'
   persistent
 
   attr_reader :user, :password
@@ -26,9 +27,10 @@ class SparqlClient
     @password = password
   end
 
-  def basic_auth
-    { username: @user, password: @password }
-  end
+  RESULT_JSON = 'application/sparql-results+json'.freeze
+  RESULT_XML  = 'application/sparql-results+xml'.freeze
+  ACCEPT_JSON = {'Accept' => RESULT_JSON}.freeze
+  ACCEPT_XML  = {'Accept' => RESULT_XML}.freeze
 
   READ_METHODS  = %w(select ask construct describe)
   WRITE_METHODS = %w(insert delete create drop clear)
@@ -47,20 +49,40 @@ class SparqlClient
 
   private
 
+  def check_response_errors(response)
+    case response.code
+    when 401
+      raise Unauthorized.new
+    when 400
+      raise MalformedQuery.new(response.parsed_response)
+    end
+  end
+
+  def headers
+    { 'Accept' => [RESULT_JSON, RESULT_XML].join(', ') }
+  end
+
   def base_query_options
-    { output: 'application/sparql-results+json' }
+    { format: 'json' }
   end
 
   def base_request_options
-    { basic_auth: basic_auth }
+    { basic_auth: basic_auth, headers: headers }
+  end
+
+  def basic_auth
+    { username: @user, password: @password }
   end
 
   def api_get(query, options = {})
+    self.class.endpoint 'sparql'
+    debugger
     get '/', extra_query: { query: query }.merge(options), transform: Virtuoso::Parser
   end
 
   def api_post(query, options = {})
-    post '/', extra_query: { query: query }.merge(options)#, response_container: %w(results) 
+    self.class.endpoint 'sparql-auth'
+    post '/', extra_query: { query: query }.merge(options) #, response_container: %w(results) 
   end
 end
 
