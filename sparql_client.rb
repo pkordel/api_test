@@ -1,3 +1,4 @@
+#encoding: utf-8
 require 'bundler/setup'
 require 'api_smith'
 require 'awesome_print'
@@ -18,6 +19,7 @@ class SparqlClient
   class Unauthorized < ClientError; end
 
   base_uri 'http://localhost:8890/'
+  #base_uri 'http://data.deichman.no/' 
   persistent
 
   attr_reader :user, :password
@@ -76,17 +78,18 @@ class SparqlClient
 
   def api_get(query, options = {})
     self.class.endpoint 'sparql'
-    debugger
     get '/', extra_query: { query: query }.merge(options), transform: Virtuoso::Parser
   end
 
   def api_post(query, options = {})
     self.class.endpoint 'sparql-auth'
+    debugger
     post '/', extra_query: { query: query }.merge(options) #, response_container: %w(results) 
   end
 end
 
 client = SparqlClient.new('reviewer', 'secret')
+
 prefixes = <<-pref
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
   PREFIX bibo: <http://purl.org/ontology/bibo/>
@@ -114,16 +117,34 @@ ask    = "ASK WHERE { ?s ?p ?o }"
 create = "CREATE GRAPH <http://example.org>"
 drop   = "DROP GRAPH <http://example.org>"
 
+insert = <<-SPARQL
+  PREFIX rev: <http://purl.org/stuff/rev#>
+  INSERT INTO <http://data.deichman.no/test> {
+    ?s rev:title (bif:regexp_replace(?title, "^(Måndens|Månedens)\\sbok\\s?-?\\s?(reprise|arkiv)?\\s?:?\\s?", "")) .
+  }
+  WHERE
+  {
+    graph <http://data.deichman.no/bookreviews/littpuls> {
+      ?s a rev:Review ;
+         rev:title ?title .
+      filter (regex(?title, "^(Måndens|Månedens)\\sbok\\s?-?\\s?(reprise|arkiv)?\\s?:?\\s?"))
+  }}
+  SPARQL
+
 query = prefixes << select
-#response = client.create(create)
-#response = client.drop(drop)
-#puts response.parsed_response["results"]["bindings"]
-response = client.select(query)
+
+response = client.create(create)
+response = client.drop(drop)
+puts response.parsed_response["results"]["bindings"]
+
+#response = client.select(query)
 #response = client.ask(ask)
 
-response.each do |solution|
-  puts solution[:book]
-  puts solution[:title]
-  puts solution[:author]
-  puts "\n\n"
-end
+#response.each do |solution|
+#  puts solution[:book]
+#  puts solution[:title]
+#  puts solution[:author]
+#  puts "\n\n"
+#end
+
+#response = client.insert(insert)
