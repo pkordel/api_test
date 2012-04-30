@@ -2,7 +2,6 @@
 require 'bundler/setup'
 require 'api_smith'
 require 'awesome_print'
-require 'json'
 require 'debugger'
 require 'rdf'
 require_relative 'parser'
@@ -10,32 +9,34 @@ require_relative 'parser'
 class SparqlClient
   include APISmith::Client
 
+  RESULT_JSON = 'application/sparql-results+json'.freeze
+  RESULT_XML  = 'application/sparql-results+xml'.freeze
+  ACCEPT_JSON = {'Accept' => RESULT_JSON}.freeze
+  ACCEPT_XML  = {'Accept' => RESULT_XML}.freeze
+
   class Parser::SparqlJson < HTTParty::Parser
-    SupportedFormats.merge!({ 'application/sparql-results+json' => :json })
+    SupportedFormats.merge!({ RESULT_JSON => :json })
   end
 
   class ClientError < StandardError; end
   class MalformedQuery < ClientError; end
   class Unauthorized < ClientError; end
 
-  base_uri 'http://localhost:8890/'
+  #base_uri 'http://localhost:8890/'
   #base_uri 'http://data.deichman.no/' 
   persistent
 
-  attr_reader :user, :password
+  attr_reader :username, :password
 
-  def initialize(user, password)
-    @user     = user
+  def initialize(uri = 'http://localhost:8890/', username, password)
+    self.class.base_uri uri
+    @username = username
     @password = password
   end
 
-  RESULT_JSON = 'application/sparql-results+json'.freeze
-  RESULT_XML  = 'application/sparql-results+xml'.freeze
-  ACCEPT_JSON = {'Accept' => RESULT_JSON}.freeze
-  ACCEPT_XML  = {'Accept' => RESULT_XML}.freeze
 
   READ_METHODS  = %w(select ask construct describe)
-  WRITE_METHODS = %w(insert delete create drop clear)
+  WRITE_METHODS = %w(insert update delete create drop clear)
 
   READ_METHODS.each do |m|
     define_method m do |*args|
@@ -73,18 +74,17 @@ class SparqlClient
   end
 
   def basic_auth
-    { username: @user, password: @password }
+    { username: @username, password: @password }
   end
 
   def api_get(query, options = {})
     self.class.endpoint 'sparql'
-    get '/', extra_query: { query: query }.merge(options), transform: Virtuoso::Parser
+    get '/', extra_query: { query: query }.merge(options), transform: RDF::Virtuoso::Parser::JSON
   end
 
   def api_post(query, options = {})
     self.class.endpoint 'sparql-auth'
-    debugger
-    post '/', extra_query: { query: query }.merge(options) #, response_container: %w(results) 
+    post '/', extra_query: { query: query }.merge(options), response_container: ["results", "bindings", 0, "callret-0", "value"] 
   end
 end
 
@@ -113,32 +113,43 @@ select = <<-SPARQL
   } OFFSET 200 LIMIT 10
   SPARQL
 
+query = prefixes << select
+
 ask    = "ASK WHERE { ?s ?p ?o }"
 create = "CREATE GRAPH <http://example.org>"
 drop   = "DROP GRAPH <http://example.org>"
 
 insert = <<-SPARQL
   PREFIX rev: <http://purl.org/stuff/rev#>
-  INSERT INTO <http://data.deichman.no/test> {
-    ?s rev:title (bif:regexp_replace(?title, "^(Måndens|Månedens)\\sbok\\s?-?\\s?(reprise|arkiv)?\\s?:?\\s?", "")) .
-  }
-  WHERE
-  {
-    graph <http://data.deichman.no/bookreviews/littpuls> {
-      ?s a rev:Review ;
-         rev:title ?title .
-      filter (regex(?title, "^(Måndens|Månedens)\\sbok\\s?-?\\s?(reprise|arkiv)?\\s?:?\\s?"))
-  }}
+  PREFIX test: <http://data.deichman.no/bookreviews/test#>
+
+  INSERT INTO <http://data.deichman.no/test> { test:1 rev:title "My Title" }
   SPARQL
 
-query = prefixes << select
+delete = <<-SPARQL
+  PREFIX rev: <http://purl.org/stuff/rev#>
+  PREFIX test: <http://data.deichman.no/bookreviews/test#>
 
-response = client.create(create)
-response = client.drop(drop)
-puts response.parsed_response["results"]["bindings"]
+  DELETE FROM <http://data.deichman.no/test> { test:1 rev:title "My New Title" } 
+  SPARQL
+
+update = <<-SPARQL
+  PREFIX rev: <http://purl.org/stuff/rev#>
+  PREFIX test: <http://data.deichman.no/bookreviews/test#>
+
+  MODIFY GRAPH <http://data.deichman.no/test> 
+  DELETE { test:1 rev:title "My Title" }
+  INSERT { test:1 rev:title "My New Title" }
+  SPARQL
+
+
+#response = client.create(create)
+#response = client.drop(drop)
+#puts response.inspect
 
 #response = client.select(query)
 #response = client.ask(ask)
+#puts response.inspect
 
 #response.each do |solution|
 #  puts solution[:book]
@@ -147,4 +158,19 @@ puts response.parsed_response["results"]["bindings"]
 #  puts "\n\n"
 #end
 
-#response = client.insert(insert)
+response = client.insert(insert)
+puts response.inspect
+response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+puts response.inspect
+puts ""
+
+response = client.update(update)
+puts response.inspect
+response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+puts response.inspect
+puts ""
+
+response = client.delete(delete)
+puts response.inspect
+response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+puts response.inspect
