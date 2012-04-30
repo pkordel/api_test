@@ -20,7 +20,7 @@ class SparqlClient
 
   class ClientError < StandardError; end
   class MalformedQuery < ClientError; end
-  class Unauthorized < ClientError; end
+  class NotAuthorized < ClientError; end
 
   #base_uri 'http://localhost:8890/'
   #base_uri 'http://data.deichman.no/' 
@@ -55,7 +55,7 @@ class SparqlClient
   def check_response_errors(response)
     case response.code
     when 401
-      raise Unauthorized.new
+      raise NotAuthorized.new
     when 400
       raise MalformedQuery.new(response.parsed_response)
     end
@@ -88,7 +88,7 @@ class SparqlClient
   end
 end
 
-client = SparqlClient.new('reviewer', 'secret')
+client = SparqlClient.new('reviewr', 'secret')
 
 prefixes = <<-pref
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
