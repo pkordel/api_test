@@ -88,7 +88,7 @@ class SparqlClient
   end
 end
 
-client = SparqlClient.new('reviewr', 'secret')
+client = SparqlClient.new('reviewer', 'secret')
 
 prefixes = <<-pref
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
