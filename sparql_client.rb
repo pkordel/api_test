@@ -21,19 +21,17 @@ class SparqlClient
   class ClientError < StandardError; end
   class MalformedQuery < ClientError; end
   class NotAuthorized < ClientError; end
+  class ServerError < StandardError; end
 
-  #base_uri 'http://localhost:8890/'
-  #base_uri 'http://data.deichman.no/' 
   persistent
 
   attr_reader :username, :password
 
-  def initialize(uri = 'http://localhost:8890/', username, password)
+  def initialize(uri, username = nil, password = nil)
     self.class.base_uri uri
     @username = username
     @password = password
   end
-
 
   READ_METHODS  = %w(select ask construct describe)
   WRITE_METHODS = %w(insert update delete create drop clear)
@@ -54,10 +52,12 @@ class SparqlClient
 
   def check_response_errors(response)
     case response.code
-    when 401
-      raise NotAuthorized.new
     when 400
       raise MalformedQuery.new(response.parsed_response)
+    when 401
+      raise NotAuthorized.new
+    when 500..599
+      raise ServerError.new(response.body)
     end
   end
 
@@ -70,7 +70,7 @@ class SparqlClient
   end
 
   def base_request_options
-    { basic_auth: basic_auth, headers: headers }
+    { headers: headers }
   end
 
   def basic_auth
@@ -79,16 +79,18 @@ class SparqlClient
 
   def api_get(query, options = {})
     self.class.endpoint 'sparql'
-    get '/', extra_query: { query: query }.merge(options), transform: RDF::Virtuoso::Parser::JSON
+    get '/', extra_query: { query: query }.merge(options), 
+      transform: RDF::Virtuoso::Parser::JSON
   end
 
   def api_post(query, options = {})
     self.class.endpoint 'sparql-auth'
-    post '/', extra_query: { query: query }.merge(options), response_container: ["results", "bindings", 0, "callret-0", "value"] 
+    post '/', extra_query: { query: query }.merge(options),
+              extra_request: { basic_auth: basic_auth },
+              response_container: ["results", "bindings", 0, "callret-0", "value"] 
   end
 end
 
-client = SparqlClient.new('reviewer', 'secret')
 
 prefixes = <<-pref
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -102,6 +104,13 @@ prefixes = <<-pref
 select = <<-SPARQL
   SELECT *
   WHERE { ?subject a bibo:Document }
+  SPARQL
+
+count = <<-SPARQL
+  PREFIX rev: <http://purl.org/stuff/rev#>
+  SELECT * WHERE { 
+    ?subject a rev:Review . 
+  }
   SPARQL
 
 query = prefixes << select
@@ -133,53 +142,32 @@ update = <<-SPARQL
   INSERT { test:1 rev:title "My New Title" }
   SPARQL
 
-def select_query(client, query)
-  response = client.select(query)
-  #puts response.inspect
-  puts response.first[:subject]
-end
+client = SparqlClient.new('http://localhost:8890', 'reviewer', 'secret')
 
 def create_query(client, query)
   response = client.create(query)
   puts response.inspect
 end
 
-def drop_query(client, query)
-  response = client.drop(query)
-  puts response.inspect
-end
+#response = client.insert(insert)
+#puts response.inspect
+#response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+#puts response.inspect
+#puts ""
 
-def ask_query(client, query)
-  response = client.ask(query)
-  puts response.inspect
-end
+#response = client.update(update)
+#puts response.inspect
+#response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+#puts response.inspect
+#puts ""
 
-#response.each do |solution|
-#  puts solution[:book]
-#  puts solution[:title]
-#  puts solution[:author]
-#  puts "\n\n"
-#end
+#response = client.delete(delete)
+#puts response.inspect
+#response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+#puts response.inspect
 
-def insert_query(client, query)
-  response = client.insert(query)
-  puts response.inspect
-  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-  puts response.inspect
-end
-
-def update_query(client, query)
-  response = client.update(query)
-  puts response.inspect
-  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-  puts response.inspect
-end
-
-def delete_query(client, query)
-  response = client.delete(query)
-  puts response.inspect
-  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-  puts response.inspect
-end
-
-select_query(client, query)
+client = SparqlClient.new('http://data.deichman.no/')
+solutions = client.select(count)
+#response = client.ask(ask)
+puts solutions.count
+puts solutions.first.inspect
