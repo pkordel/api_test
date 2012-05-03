@@ -88,7 +88,7 @@ class SparqlClient
   end
 end
 
-client = SparqlClient.new('reviewr', 'secret')
+client = SparqlClient.new('reviewer', 'secret')
 
 prefixes = <<-pref
   PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -100,17 +100,8 @@ prefixes = <<-pref
   pref
 
 select = <<-SPARQL
-  SELECT DISTINCT ?book ?title ?author ?image
-  WHERE { 
-    GRAPH <http://data.deichman.no/books> { 
-      ?book a bibo:Document ;
-            dc:language lang:nob ;
-            dc:creator ?creator ;
-            dc:title ?title .
-      ?creator foaf:name ?author .
-      OPTIONAL { ?book foaf:depiction ?image }
-    } 
-  } OFFSET 200 LIMIT 10
+  SELECT *
+  WHERE { ?subject a bibo:Document }
   SPARQL
 
 query = prefixes << select
@@ -142,14 +133,26 @@ update = <<-SPARQL
   INSERT { test:1 rev:title "My New Title" }
   SPARQL
 
+def select_query(client, query)
+  response = client.select(query)
+  #puts response.inspect
+  puts response.first[:subject]
+end
 
-#response = client.create(create)
-#response = client.drop(drop)
-#puts response.inspect
+def create_query(client, query)
+  response = client.create(query)
+  puts response.inspect
+end
 
-#response = client.select(query)
-#response = client.ask(ask)
-#puts response.inspect
+def drop_query(client, query)
+  response = client.drop(query)
+  puts response.inspect
+end
+
+def ask_query(client, query)
+  response = client.ask(query)
+  puts response.inspect
+end
 
 #response.each do |solution|
 #  puts solution[:book]
@@ -158,19 +161,25 @@ update = <<-SPARQL
 #  puts "\n\n"
 #end
 
-response = client.insert(insert)
-puts response.inspect
-response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-puts response.inspect
-puts ""
+def insert_query(client, query)
+  response = client.insert(query)
+  puts response.inspect
+  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+  puts response.inspect
+end
 
-response = client.update(update)
-puts response.inspect
-response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-puts response.inspect
-puts ""
+def update_query(client, query)
+  response = client.update(query)
+  puts response.inspect
+  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+  puts response.inspect
+end
 
-response = client.delete(delete)
-puts response.inspect
-response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
-puts response.inspect
+def delete_query(client, query)
+  response = client.delete(query)
+  puts response.inspect
+  response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
+  puts response.inspect
+end
+
+select_query(client, query)
