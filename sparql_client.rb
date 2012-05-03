@@ -78,6 +78,7 @@ class SparqlClient
   end
 
   def api_get(query, options = {})
+    debugger
     self.class.endpoint 'sparql'
     get '/', extra_query: { query: query }.merge(options), 
       transform: RDF::Virtuoso::Parser::JSON
@@ -174,8 +175,12 @@ client = SparqlClient.new('http://localhost:8890', 'reviewer', 'secret')
 #response = client.select("select ?s ?o where { graph <http://data.deichman.no/test> { ?s ?p ?o } }")
 #puts response.inspect
 
+test = <<-test
+  SELECT ?subject\nWHERE {\n  ?subject <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://purl.org/stuff/rev#Review> . }
+test
+
 client = SparqlClient.new('http://data.deichman.no/')
-solutions = client.select(count)
+solutions = client.select(test)
 #response = client.ask(ask)
 puts solutions.count
 puts solutions.first.inspect
